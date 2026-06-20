@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar, { SectionKey } from "@/components/Sidebar";
 import TaskCard from "@/components/TaskCard";
 import SuggestionCard from "@/components/SuggestionCard";
@@ -8,21 +8,37 @@ import TaskModal from "@/components/TaskModal";
 import SettingsPanel from "@/components/SettingsPanel";
 import Toast from "@/components/Toast";
 import AiTestPanel from "@/components/AiTestPanel";
+import MyContextPage from "@/components/context/MyContextPage";
+import EventsPage from "@/components/events/EventsPage";
+import { initialSuggestions } from "@/lib/mockData";
 import {
-  initialSettings,
-  initialSuggestions,
-  initialTasks,
-} from "@/lib/mockData";
-import { Settings, Suggestion, Task } from "@/lib/types";
+  AudienceSegment,
+  CompanyProfile,
+  EventRecord,
+  EventStrategy,
+  FounderProfile,
+  Settings,
+  Suggestion,
+  Task,
+} from "@/lib/types";
 
 const TODAY = "2026-06-20";
+const SAVE_DEBOUNCE_MS = 800;
+
+type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 export default function Home() {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>(
     initialSuggestions
   );
-  const [settings, setSettings] = useState<Settings>(initialSettings);
+  const [settings, setSettings] = useState<Settings>({
+    notificationsEnabled: true,
+    defaultReminderMinutes: 15,
+  });
   const [section, setSection] = useState<SectionKey>("today");
   const [modalTask, setModalTask] = useState<Task | null | undefined>(
     undefined
@@ -31,12 +47,153 @@ export default function Home() {
     null
   );
   const [toast, setToast] = useState<string | null>(null);
+  const [founderProfile, setFounderProfile] = useState<FounderProfile | null>(
+    null
+  );
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(
+    null
+  );
+  const [audienceSegments, setAudienceSegments] = useState<AudienceSegment[]>(
+    []
+  );
+  const [events, setEvents] = useState<EventRecord[]>([]);
+  const [strategiesByEvent, setStrategiesByEvent] = useState<
+    Record<string, EventStrategy>
+  >({});
+
+  const [contextSaveStatus, setContextSaveStatus] = useState<SaveStatus>("idle");
+  const [settingsSaveStatus, setSettingsSaveStatus] = useState<SaveStatus>("idle");
 
   function showToast(message: string) {
     setToast(message);
     setTimeout(() => setToast(null), 3000);
   }
 
+  // ---------------------------------------------------------------------
+  // Initial load
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/bootstrap");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to load data.");
+        if (cancelled) return;
+
+        setTasks(data.tasks ?? []);
+        if (data.settings) setSettings(data.settings);
+        setFounderProfile(data.founderProfile);
+        setCompanyProfile(data.companyProfile);
+        setAudienceSegments(data.audienceSegments ?? []);
+        setEvents(data.events ?? []);
+        setStrategiesByEvent(data.strategiesByEvent ?? {});
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(
+            err instanceof Error ? err.message : "Failed to load application data."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ---------------------------------------------------------------------
+  // Debounced save helpers for "edit as you type" forms
+  // ---------------------------------------------------------------------
+  const founderSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const companySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audienceSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleFounderChange(profile: FounderProfile) {
+    setFounderProfile(profile);
+    setContextSaveStatus("saving");
+    if (founderSaveTimer.current) clearTimeout(founderSaveTimer.current);
+    founderSaveTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/founder-profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profile }),
+        });
+        if (!res.ok) throw new Error();
+        setContextSaveStatus("saved");
+      } catch {
+        setContextSaveStatus("error");
+        showToast("Failed to save founder profile. Please try again.");
+      }
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  function handleCompanyChange(profile: CompanyProfile) {
+    setCompanyProfile(profile);
+    setContextSaveStatus("saving");
+    if (companySaveTimer.current) clearTimeout(companySaveTimer.current);
+    companySaveTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/company-profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profile }),
+        });
+        if (!res.ok) throw new Error();
+        setContextSaveStatus("saved");
+      } catch {
+        setContextSaveStatus("error");
+        showToast("Failed to save company profile. Please try again.");
+      }
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  function handleAudienceChange(segments: AudienceSegment[]) {
+    setAudienceSegments(segments);
+    setContextSaveStatus("saving");
+    if (audienceSaveTimer.current) clearTimeout(audienceSaveTimer.current);
+    audienceSaveTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/audience-segments", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ segments }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error();
+        // Replace client-temp ids with the real DB ids returned by the server.
+        setAudienceSegments(data.segments ?? []);
+        setContextSaveStatus("saved");
+      } catch {
+        setContextSaveStatus("error");
+        showToast("Failed to save audience segments. Please try again.");
+      }
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  function handleSettingsChange(next: Settings) {
+    setSettings(next);
+    setSettingsSaveStatus("saving");
+    fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ settings: next }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error();
+        setSettingsSaveStatus("saved");
+      })
+      .catch(() => {
+        setSettingsSaveStatus("error");
+        showToast("Failed to save settings. Please try again.");
+      });
+  }
+
+  // ---------------------------------------------------------------------
+  // Derived task lists
+  // ---------------------------------------------------------------------
   const pendingTasks = useMemo(
     () => tasks.filter((t) => t.status === "pending"),
     [tasks]
@@ -72,42 +229,134 @@ export default function Home() {
     upcoming: upcomingTasks.length,
     suggestions: suggestions.length,
     completed: completedTasks.length,
+    mycontext: 0,
+    events: 0,
     settings: 0,
   };
 
-  function handleToggleComplete(id: string) {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? { ...t, status: t.status === "completed" ? "pending" : "completed" }
-          : t
-      )
-    );
+  // ---------------------------------------------------------------------
+  // Task CRUD — each is a direct, non-debounced call since these are
+  // discrete user actions (click "save", click "complete"), not typing.
+  // ---------------------------------------------------------------------
+  async function handleToggleComplete(id: string) {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    const updated: Task = {
+      ...task,
+      status: task.status === "completed" ? "pending" : "completed",
+    };
+    setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: updated }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setTasks((prev) => prev.map((t) => (t.id === id ? task : t)));
+      showToast("Failed to update task. Please try again.");
+    }
   }
 
-  function handleDeleteTask(id: string) {
+  async function handleDeleteTask(id: string) {
+    const removed = tasks.find((t) => t.id === id);
     setTasks((prev) => prev.filter((t) => t.id !== id));
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      if (removed) setTasks((prev) => [removed, ...prev]);
+      showToast("Failed to delete task. Please try again.");
+    }
   }
+
+  const handleAddTasksBulk = useCallback(
+    async (newTasks: Task[], dedupeKey?: string) => {
+      if (!dedupeKey) {
+        // Manual single-task add path without a dedupe key falls back
+        // to direct inserts (used only internally; the UI always
+        // supplies a dedupeKey for bulk prep/follow-up adds).
+        for (const t of newTasks) {
+          try {
+            const res = await fetch("/api/tasks", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ task: t }),
+            });
+            const data = await res.json();
+            if (res.ok) setTasks((prev) => [data.task, ...prev]);
+          } catch {
+            // ignore individual failures here; bulk path below is the
+            // one used by the UI and handles errors explicitly.
+          }
+        }
+        return { skipped: false, count: newTasks.length };
+      }
+
+      try {
+        const res = await fetch("/api/tasks/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tasks: newTasks, dedupeKey }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to save tasks.");
+        if (!data.skipped) {
+          setTasks((prev) => [...data.tasks, ...prev]);
+        }
+        return { skipped: data.skipped as boolean, count: data.tasks?.length ?? 0 };
+      } catch (err) {
+        showToast(
+          err instanceof Error ? err.message : "Failed to save tasks. Please try again."
+        );
+        return { skipped: false, count: 0, error: true };
+      }
+    },
+    []
+  );
 
   function openEditTask(task: Task) {
     setPendingSuggestionId(null);
     setModalTask(task);
   }
 
-  function handleSaveTask(task: Task) {
-    if (pendingSuggestionId) {
-      setTasks((prev) => [task, ...prev]);
-      setSuggestions((prev) => prev.filter((s) => s.id !== pendingSuggestionId));
-      showToast(`Added “${task.title}” to your tasks.`);
-    } else {
-      setTasks((prev) => {
-        const exists = prev.some((t) => t.id === task.id);
-        if (exists) {
-          return prev.map((t) => (t.id === task.id ? task : t));
-        }
-        return [task, ...prev];
-      });
-      showToast(`Task “${task.title}” saved.`);
+  async function handleSaveTask(task: Task) {
+    const isNew = !tasks.some((t) => t.id === task.id);
+    try {
+      if (isNew) {
+        const res = await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to save task.");
+        setTasks((prev) => [data.task, ...prev]);
+      } else {
+        const res = await fetch("/api/tasks", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to save task.");
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? data.task : t)));
+      }
+
+      if (pendingSuggestionId) {
+        setSuggestions((prev) => prev.filter((s) => s.id !== pendingSuggestionId));
+      }
+      showToast(`Task "${task.title}" saved.`);
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to save task. Please try again."
+      );
+      return; // keep modal open so the user can retry
     }
     setPendingSuggestionId(null);
     setModalTask(undefined);
@@ -137,6 +386,35 @@ export default function Home() {
     }
     showToast(
       `Reminder: a task is due in ${settings.defaultReminderMinutes} minutes.`
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <p className="text-sm text-gray-400">Loading your data…</p>
+      </div>
+    );
+  }
+
+  if (loadError || !founderProfile || !companyProfile) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center p-6">
+        <div className="max-w-md rounded-xl border border-red-200 bg-red-50 p-6 text-center">
+          <p className="text-sm font-medium text-red-700">
+            Could not load application data.
+          </p>
+          <p className="mt-1 text-xs text-red-600">
+            {loadError ?? "Unknown error."}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -243,11 +521,47 @@ export default function Home() {
                 </Section>
               )}
 
+              {section === "mycontext" && (
+                <Section
+                  title="My Context"
+                  subtitle="Long-term context the AI uses to personalise every event strategy"
+                >
+                  <SaveStatusBadge status={contextSaveStatus} />
+                  <MyContextPage
+                    founderProfile={founderProfile}
+                    onFounderChange={handleFounderChange}
+                    companyProfile={companyProfile}
+                    onCompanyChange={handleCompanyChange}
+                    audienceSegments={audienceSegments}
+                    onAudienceChange={handleAudienceChange}
+                  />
+                </Section>
+              )}
+
+              {section === "events" && (
+                <Section
+                  title="Events"
+                  subtitle="Prepare for an upcoming event using your founder, company and audience context"
+                >
+                  <EventsPage
+                    events={events}
+                    initialStrategies={strategiesByEvent}
+                    founderProfile={founderProfile}
+                    companyProfile={companyProfile}
+                    audienceSegments={audienceSegments}
+                    defaultReminderMinutes={settings.defaultReminderMinutes}
+                    onAddTasksBulk={handleAddTasksBulk}
+                    onToast={showToast}
+                  />
+                </Section>
+              )}
+
               {section === "settings" && (
                 <Section title="Settings" subtitle="Configure your preferences">
+                  <SaveStatusBadge status={settingsSaveStatus} />
                   <SettingsPanel
                     settings={settings}
-                    onChange={setSettings}
+                    onChange={handleSettingsChange}
                     onTestNotification={handleTestNotification}
                   />
                 </Section>
@@ -270,6 +584,23 @@ export default function Home() {
       )}
 
       {toast && <Toast message={toast} />}
+    </div>
+  );
+}
+
+function SaveStatusBadge({ status }: { status: SaveStatus }) {
+  if (status === "idle") return null;
+  const config: Record<Exclude<SaveStatus, "idle">, { text: string; className: string }> = {
+    saving: { text: "Saving…", className: "bg-gray-100 text-gray-500" },
+    saved: { text: "✓ Saved", className: "bg-green-100 text-green-700" },
+    error: { text: "⚠ Failed to save", className: "bg-red-100 text-red-700" },
+  };
+  const c = config[status];
+  return (
+    <div className="mb-3">
+      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.className}`}>
+        {c.text}
+      </span>
     </div>
   );
 }
