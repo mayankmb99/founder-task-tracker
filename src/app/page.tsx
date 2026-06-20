@@ -7,6 +7,7 @@ import SuggestionCard from "@/components/SuggestionCard";
 import TaskModal from "@/components/TaskModal";
 import SettingsPanel from "@/components/SettingsPanel";
 import Toast from "@/components/Toast";
+import AiTestPanel from "@/components/AiTestPanel";
 import {
   initialSettings,
   initialSuggestions,
@@ -205,6 +206,7 @@ export default function Home() {
                   title="Suggestions"
                   subtitle="Tasks detected from Gmail, WhatsApp and Calendar"
                 >
+                  <AiTestPanel />
                   {suggestions.length === 0 ? (
                     <EmptyState message="No new suggestions right now." />
                   ) : (
