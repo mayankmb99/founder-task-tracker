@@ -150,6 +150,19 @@ export function eventTargetFromDb(row: {
   };
 }
 
+export function eventTargetToDb(target: EventTarget) {
+  return {
+    person_name: target.personName || null,
+    role: target.role || null,
+    company_name: target.companyName || null,
+    company_description: target.companyDescription || null,
+    known_needs: target.knownNeeds,
+    relevance_reason: target.relevanceReason || null,
+    priority: target.priority,
+    status: target.status,
+  };
+}
+
 export function eventFromDb(
   row: {
     id: string;
@@ -169,12 +182,24 @@ export function eventFromDb(
     eventType: row.event_type as EventRecord["eventType"],
     eventName: row.event_name,
     eventDescription: row.event_description ?? "",
-    eventStart: row.event_start ? row.event_start.slice(0, 10) : "",
+    eventStart: row.event_start ?? "",
     eventLocation: row.event_location ?? "",
     userGoal: row.user_goal ?? "",
     additionalContext: row.additional_context ?? "",
     audienceSegmentId,
     targets,
+  };
+}
+
+export function eventToDb(event: EventRecord) {
+  return {
+    event_type: event.eventType,
+    event_name: event.eventName,
+    event_description: event.eventDescription || null,
+    event_start: event.eventStart || null,
+    event_location: event.eventLocation || null,
+    user_goal: event.userGoal || null,
+    additional_context: event.additionalContext || null,
   };
 }
 
@@ -218,5 +243,27 @@ export function eventStrategyFromDb(row: {
     risks: row.risks ?? [],
     missingInformation: row.missing_information ?? [],
     confidence: row.confidence ?? 0,
+  };
+}
+
+export function eventStrategyToDb(strategy: EventStrategy) {
+  return {
+    positioning_summary: strategy.positioningSummary,
+    founder_introduction: strategy.founderIntroduction,
+    company_pitch: strategy.companyPitch,
+    people_to_prioritise: strategy.peopleToPrioritise.map((person) => ({
+      person_name: person.personName,
+      reason: person.reason,
+      pitch_angle: person.pitchAngle,
+    })),
+    proof_points_to_use: strategy.proofPointsToUse,
+    questions_to_ask: strategy.questionsToAsk,
+    talking_points: strategy.talkingPoints,
+    conversation_goals: strategy.conversationGoals,
+    preparation_items: strategy.preparationItems,
+    follow_up_actions: strategy.followUpActions,
+    risks: strategy.risks,
+    missing_information: strategy.missingInformation,
+    confidence: strategy.confidence,
   };
 }

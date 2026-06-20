@@ -33,16 +33,20 @@ export default function EventTargetCard({ target }: { target: EventTarget }) {
       )}
       {target.knownNeeds.length > 0 && (
         <p className="mt-2 text-xs text-gray-500">
-          <span className="font-medium text-gray-600">Known needs: </span>
+          <span className="font-medium text-gray-600">What we know: </span>
           {target.knownNeeds.join("; ")}
         </p>
       )}
       {target.relevanceReason && (
         <p className="mt-1 text-xs text-gray-500">
-          <span className="font-medium text-gray-600">Why relevant: </span>
+          <span className="font-medium text-gray-600">Why this person matters: </span>
           {target.relevanceReason}
         </p>
       )}
+      <p className="mt-1 text-xs text-gray-500">
+        <span className="font-medium text-gray-600">Relationship status: </span>
+        {target.status.replaceAll("_", " ")}
+      </p>
     </div>
   );
 }

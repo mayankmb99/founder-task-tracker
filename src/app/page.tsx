@@ -22,14 +22,21 @@ import {
   Task,
 } from "@/lib/types";
 
-const TODAY = "2026-06-20";
+const TODAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}).format(new Date());
 const SAVE_DEBOUNCE_MS = 800;
+const BOOTSTRAP_TIMEOUT_MS = 15_000;
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>(
@@ -74,9 +81,18 @@ export default function Home() {
   // ---------------------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      BOOTSTRAP_TIMEOUT_MS
+    );
+
     (async () => {
       try {
-        const res = await fetch("/api/bootstrap");
+        const res = await fetch("/api/bootstrap", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load data.");
         if (cancelled) return;
@@ -91,17 +107,24 @@ export default function Home() {
       } catch (err) {
         if (!cancelled) {
           setLoadError(
-            err instanceof Error ? err.message : "Failed to load application data."
+            err instanceof DOMException && err.name === "AbortError"
+              ? "Loading timed out after 15 seconds. Check the local server and Supabase connection, then retry."
+              : err instanceof Error
+                ? err.message
+                : "Failed to load application data."
           );
         }
       } finally {
+        window.clearTimeout(timeoutId);
         if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
+      controller.abort();
     };
-  }, []);
+  }, [loadAttempt]);
 
   // ---------------------------------------------------------------------
   // Debounced save helpers for "edit as you type" forms
@@ -408,7 +431,11 @@ export default function Home() {
             {loadError ?? "Unknown error."}
           </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              setLoading(true);
+              setLoadError(null);
+              setLoadAttempt((attempt) => attempt + 1);
+            }}
             className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
           >
             Retry
@@ -484,7 +511,17 @@ export default function Home() {
                   title="Suggestions"
                   subtitle="Tasks detected from Gmail, WhatsApp and Calendar"
                 >
-                  <AiTestPanel />
+                  <AiTestPanel
+                    defaultReminderMinutes={settings.defaultReminderMinutes}
+                    onTaskAdded={(task) =>
+                      setTasks((prev) =>
+                        prev.some((existing) => existing.id === task.id)
+                          ? prev
+                          : [task, ...prev]
+                      )
+                    }
+                    onToast={showToast}
+                  />
                   {suggestions.length === 0 ? (
                     <EmptyState message="No new suggestions right now." />
                   ) : (
@@ -524,7 +561,7 @@ export default function Home() {
               {section === "mycontext" && (
                 <Section
                   title="My Context"
-                  subtitle="Long-term context the AI uses to personalise every event strategy"
+                  subtitle="Long-term context the AI uses to personalise every preparation strategy"
                 >
                   <SaveStatusBadge status={contextSaveStatus} />
                   <MyContextPage
@@ -540,8 +577,8 @@ export default function Home() {
 
               {section === "events" && (
                 <Section
-                  title="Events"
-                  subtitle="Prepare for an upcoming event using your founder, company and audience context"
+                  title="Meeting & Event Preparation"
+                  subtitle="Prepare for meetings, calls, negotiations, conferences, and startup events"
                 >
                   <EventsPage
                     events={events}
@@ -552,6 +589,7 @@ export default function Home() {
                     defaultReminderMinutes={settings.defaultReminderMinutes}
                     onAddTasksBulk={handleAddTasksBulk}
                     onToast={showToast}
+                    onEventsChange={setEvents}
                   />
                 </Section>
               )}

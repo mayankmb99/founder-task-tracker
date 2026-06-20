@@ -25,7 +25,7 @@ const TASK_NAV_ITEMS: Array<{ key: SectionKey; label: string; icon: string }> = 
 
 const COPILOT_NAV_ITEMS: Array<{ key: SectionKey; label: string; icon: string }> = [
   { key: "mycontext", label: "My Context", icon: "🧑‍💼" },
-  { key: "events", label: "Events", icon: "🎤" },
+  { key: "events", label: "Prepare", icon: "🎤" },
 ];
 
 const SETTINGS_NAV_ITEMS: Array<{ key: SectionKey; label: string; icon: string }> = [
@@ -67,7 +67,7 @@ export default function Sidebar({
       </nav>
 
       <p className="mt-4 mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-        Event Copilot
+        Preparation Copilot
       </p>
       <nav className="flex flex-col gap-1">
         {COPILOT_NAV_ITEMS.map((item) => (

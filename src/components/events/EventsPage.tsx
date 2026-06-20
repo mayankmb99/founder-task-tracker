@@ -11,6 +11,8 @@ import {
 } from "@/lib/types";
 import EventTargetCard from "./EventTargetCard";
 import EventStrategyView from "./EventStrategyView";
+import InteractionForm from "./InteractionForm";
+import { salesMeetingDemo } from "@/lib/mockData";
 
 interface BulkAddResult {
   skipped: boolean;
@@ -27,10 +29,11 @@ interface EventsPageProps {
   defaultReminderMinutes: number;
   onAddTasksBulk: (tasks: Task[], dedupeKey?: string) => Promise<BulkAddResult>;
   onToast: (message: string) => void;
+  onEventsChange: (events: EventRecord[]) => void;
 }
 
 function offsetDateString(baseDate: string, days: number): string {
-  const [year, month, day] = baseDate.split("-").map(Number);
+  const [year, month, day] = baseDate.slice(0, 10).split("-").map(Number);
   const d = new Date(Date.UTC(year, month - 1, day));
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
@@ -45,6 +48,7 @@ export default function EventsPage({
   defaultReminderMinutes,
   onAddTasksBulk,
   onToast,
+  onEventsChange,
 }: EventsPageProps) {
   const [selectedEventId, setSelectedEventId] = useState(events[0]?.id ?? "");
   const [strategies, setStrategies] =
@@ -52,10 +56,15 @@ export default function EventsPage({
   const [loadingEventId, setLoadingEventId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [unsavedWarning, setUnsavedWarning] = useState<string | null>(null);
+  const [groundingWarnings, setGroundingWarnings] = useState<string[]>([]);
+  const [retrievalStatus, setRetrievalStatus] = useState<string | null>(null);
   const [prepTasksAdded, setPrepTasksAdded] = useState<Record<string, boolean>>({});
   const [followUpTasksAdded, setFollowUpTasksAdded] = useState<Record<string, boolean>>({});
   const [addingPrep, setAddingPrep] = useState(false);
   const [addingFollowUp, setAddingFollowUp] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<EventRecord | null | undefined>(undefined);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [savingEvent, setSavingEvent] = useState(false);
 
   const selectedEvent = events.find((e) => e.id === selectedEventId) ?? null;
   const strategy = selectedEvent ? strategies[selectedEvent.id] : undefined;
@@ -68,6 +77,8 @@ export default function EventsPage({
     setLoadingEventId(selectedEvent.id);
     setError(null);
     setUnsavedWarning(null);
+    setGroundingWarnings([]);
+    setRetrievalStatus(null);
     try {
       const res = await fetch("/api/generate-event-strategy", {
         method: "POST",
@@ -81,10 +92,12 @@ export default function EventsPage({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to generate event strategy.");
+        setError(data.error ?? "Failed to generate preparation strategy.");
         return;
       }
       setStrategies((prev) => ({ ...prev, [selectedEvent.id]: data.result }));
+      setGroundingWarnings(Array.isArray(data.groundingWarnings) ? data.groundingWarnings : []);
+      setRetrievalStatus(typeof data.retrievalStatus === "string" ? data.retrievalStatus : null);
       setPrepTasksAdded((prev) => ({ ...prev, [selectedEvent.id]: false }));
       setFollowUpTasksAdded((prev) => ({ ...prev, [selectedEvent.id]: false }));
       if (!data.persisted) {
@@ -93,9 +106,39 @@ export default function EventsPage({
         );
       }
     } catch {
-      setError("Could not reach the event strategy endpoint.");
+      setError("Could not reach the preparation strategy endpoint.");
     } finally {
       setLoadingEventId(null);
+    }
+  }
+
+  async function handleSaveEvent(event: EventRecord) {
+    setSavingEvent(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/events", {
+        method: formMode === "create" ? "POST" : "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save interaction.");
+      const nextEvents =
+        formMode === "create"
+          ? [...events, data.event]
+          : events.map((existing) =>
+              existing.id === data.event.id ? data.event : existing
+            );
+      onEventsChange(nextEvents);
+      setSelectedEventId(data.event.id);
+      setEditingEvent(undefined);
+      onToast(`${data.event.eventName} saved.`);
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error ? saveError.message : "Failed to save interaction."
+      );
+    } finally {
+      setSavingEvent(false);
     }
   }
 
@@ -119,7 +162,7 @@ export default function EventsPage({
     if (result.error) return;
     setPrepTasksAdded((prev) => ({ ...prev, [selectedEvent.id]: true }));
     if (result.skipped) {
-      onToast("Preparation tasks were already added for this event.");
+      onToast("Preparation tasks were already added for this meeting or event.");
     } else {
       onToast(`Added ${result.count} preparation task(s) for ${selectedEvent.eventName}.`);
     }
@@ -145,19 +188,55 @@ export default function EventsPage({
     if (result.error) return;
     setFollowUpTasksAdded((prev) => ({ ...prev, [selectedEvent.id]: true }));
     if (result.skipped) {
-      onToast("Follow-up tasks were already added for this event.");
+      onToast("Follow-up tasks were already added for this meeting or event.");
     } else {
       onToast(`Added ${result.count} follow-up task(s) for ${selectedEvent.eventName}.`);
     }
   }
 
   if (!selectedEvent) {
-    return <p className="text-sm text-gray-400">No events yet.</p>;
+    return (
+      <div>
+        {editingEvent !== undefined ? (
+          <InteractionForm
+            event={editingEvent}
+            mode={formMode}
+            defaultAudienceSegmentId={audienceSegments[0]?.id ?? null}
+            saving={savingEvent}
+            onSave={handleSaveEvent}
+            onCancel={() => setEditingEvent(undefined)}
+          />
+        ) : (
+          <button
+            onClick={() => {
+              setFormMode("create");
+              setEditingEvent(null);
+            }}
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white"
+          >
+            Create meeting or event
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (editingEvent !== undefined) {
+    return (
+      <InteractionForm
+        event={editingEvent}
+        mode={formMode}
+        defaultAudienceSegmentId={audienceSegments[0]?.id ?? null}
+        saving={savingEvent}
+        onSave={handleSaveEvent}
+        onCancel={() => setEditingEvent(undefined)}
+      />
+    );
   }
 
   return (
     <div className="space-y-6">
-      {events.length > 1 && (
+      <div className="flex flex-wrap items-center gap-2">
         <select
           value={selectedEventId}
           onChange={(e) => setSelectedEventId(e.target.value)}
@@ -169,7 +248,29 @@ export default function EventsPage({
             </option>
           ))}
         </select>
-      )}
+        <button
+          onClick={() => {
+            setFormMode("create");
+            setEditingEvent(null);
+          }}
+          className="rounded-lg bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600"
+        >
+          + New meeting or event
+        </button>
+        <button
+          onClick={() => {
+            setFormMode("create");
+            setEditingEvent({
+              ...salesMeetingDemo,
+              audienceSegmentId: audienceSegments[0]?.id ?? null,
+              targets: salesMeetingDemo.targets.map((target) => ({ ...target })),
+            });
+          }}
+          className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100"
+        >
+          Load sales meeting demo
+        </button>
+      </div>
 
       <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3">
@@ -181,13 +282,24 @@ export default function EventsPage({
               {selectedEvent.eventType.replace(/_/g, " ")}
             </p>
           </div>
+          <button
+            onClick={() => {
+              setFormMode("edit");
+              setEditingEvent(selectedEvent);
+            }}
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+          >
+            Edit interaction
+          </button>
         </div>
         <p className="mt-2 text-sm text-gray-500">{selectedEvent.eventDescription}</p>
 
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-xs font-medium text-gray-400">Date</p>
-            <p className="text-gray-700">{selectedEvent.eventStart}</p>
+            <p className="text-gray-700">
+              {new Date(selectedEvent.eventStart).toLocaleString()}
+            </p>
           </div>
           <div>
             <p className="text-xs font-medium text-gray-400">Location</p>
@@ -196,7 +308,7 @@ export default function EventsPage({
         </div>
 
         <div className="mt-4">
-          <p className="text-xs font-medium text-gray-400">Goal for this event</p>
+          <p className="text-xs font-medium text-gray-400">Desired outcome</p>
           <p className="text-sm text-gray-700">{selectedEvent.userGoal}</p>
         </div>
 
@@ -213,7 +325,7 @@ export default function EventsPage({
 
         <div className="mt-5">
           <p className="mb-2 text-xs font-medium text-gray-400">
-            Target people & companies
+            People and organisations involved
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {selectedEvent.targets.map((t) => (
@@ -228,13 +340,30 @@ export default function EventsPage({
           className="mt-5 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loadingEventId === selectedEvent.id
-            ? "Generating strategy…"
+            ? "Generating preparation strategy…"
             : strategy
-            ? "Regenerate Event Strategy"
-            : "Generate Event Strategy"}
+            ? "Regenerate Preparation Strategy"
+            : "Generate Preparation Strategy"}
         </button>
 
         {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+        {retrievalStatus === "not_configured" && (
+          <p className="mt-3 text-sm text-gray-500">
+            Document retrieval is not configured.
+          </p>
+        )}
+        {groundingWarnings.length > 0 && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+              Grounding warning
+            </p>
+            <p className="mt-1">
+              The generated strategy passed schema validation, but the deterministic
+              checks flagged a possible grounding issue. Review carefully before
+              adding tasks.
+            </p>
+          </div>
+        )}
         {unsavedWarning && (
           <p className="mt-3 text-sm text-amber-600">{unsavedWarning}</p>
         )}
@@ -242,7 +371,7 @@ export default function EventsPage({
 
       {strategy && (
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-          <EventStrategyView strategy={strategy} />
+          <EventStrategyView strategy={strategy} targets={selectedEvent.targets} />
 
           <div className="mt-5 flex gap-2">
             <button

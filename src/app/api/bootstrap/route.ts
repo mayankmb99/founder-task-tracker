@@ -3,6 +3,8 @@ import { DEMO_USER_ID, supabaseServer } from "@/lib/supabaseServer";
 import {
   audienceSegmentFromDb,
   eventFromDb,
+  eventTargetToDb,
+  eventToDb,
   eventStrategyFromDb,
   eventTargetFromDb,
   companyProfileFromDb,
@@ -117,13 +119,7 @@ async function seedIfEmpty() {
         .insert({
           user_id: DEMO_USER_ID,
           external_event_id: e.id,
-          event_type: e.eventType,
-          event_name: e.eventName,
-          event_description: e.eventDescription,
-          event_start: e.eventStart || null,
-          event_location: e.eventLocation,
-          user_goal: e.userGoal,
-          additional_context: e.additionalContext,
+          ...eventToDb(e),
         })
         .select("id")
         .single();
@@ -135,14 +131,7 @@ async function seedIfEmpty() {
           e.targets.map((t) => ({
             user_id: DEMO_USER_ID,
             event_id: eventRow.id,
-            person_name: t.personName,
-            role: t.role,
-            company_name: t.companyName,
-            company_description: t.companyDescription,
-            known_needs: t.knownNeeds,
-            relevance_reason: t.relevanceReason,
-            priority: t.priority,
-            status: t.status,
+            ...eventTargetToDb(t),
           }))
         );
       }

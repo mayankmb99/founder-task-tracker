@@ -1,0 +1,5 @@
+This app uses AI in two places: task extraction and founder preparation strategy generation. Both workflows use the OpenAI Responses API with strict Structured Outputs and a shared server-side client. Task extraction turns a short message into a structured suggestion the user can add, edit, or dismiss; preparation strategy turns founder, company, audience, interaction, and target context into a grounded meeting plan with follow-up tasks.
+
+The implementation uses only supplied app data and optional structured Supabase retrieval. Document retrieval is optional and was not configured in this pass. Hallucination risk is reduced with conservative validation, grounding checks, duplicate-acceptance protection, and human approval before task creation. Temporary eval fixtures and live evals were added to measure regressions.
+
+Expected impact: less manual task triage and better meeting prep quality. Limitation: the frozen database schema prevents a permanent task-to-interaction link, and document RAG remains off unless a vector store is configured.

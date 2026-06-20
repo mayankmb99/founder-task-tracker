@@ -8,6 +8,7 @@ interface TaskModalProps {
   defaultReminderMinutes: number;
   onSave: (task: Task) => void;
   onClose: () => void;
+  saving?: boolean;
 }
 
 const SOURCES: TaskSource[] = ["Manual", "Gmail", "WhatsApp", "Calendar"];
@@ -17,6 +18,7 @@ export default function TaskModal({
   defaultReminderMinutes,
   onSave,
   onClose,
+  saving = false,
 }: TaskModalProps) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [source, setSource] = useState<TaskSource>(task?.source ?? "Manual");
@@ -143,9 +145,10 @@ export default function TaskModal({
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-600"
+              disabled={saving}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {task ? "Save Changes" : "Add Task"}
+              {saving ? "Saving…" : task ? "Save Changes" : "Add Task"}
             </button>
           </div>
         </form>

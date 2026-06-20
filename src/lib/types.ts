@@ -23,6 +23,18 @@ export interface Suggestion {
   confidence: number; // 0-100
 }
 
+export interface ExtractionResult {
+  isActionItem: boolean;
+  taskOwner: "user" | "sender" | "unknown";
+  taskTitle: string | null;
+  dueDate: string | null;
+  dueTime: string | null;
+  actionType: "create" | "update" | "complete" | "postpone" | "cancel" | "none";
+  confidence: number;
+  missingInformation: string[];
+  reasonForClassification: string;
+}
+
 export interface Settings {
   notificationsEnabled: boolean;
   defaultReminderMinutes: 5 | 10 | 15 | 30;
@@ -84,12 +96,16 @@ export interface EventTarget {
 // Only "startup_expo" is fully implemented for this hackathon. The
 // other values describe the same architecture's intended future scope.
 export type EventType =
-  | "startup_expo"
   | "sales_meeting"
   | "investor_meeting"
   | "partnership_meeting"
-  | "conference"
   | "vendor_negotiation"
+  | "customer_call"
+  | "startup_event"
+  | "conference"
+  | "other"
+  // Legacy value retained so the existing demo continues to reload.
+  | "startup_expo"
   | "hackathon";
 
 export interface EventRecord {
@@ -97,7 +113,7 @@ export interface EventRecord {
   eventType: EventType;
   eventName: string;
   eventDescription: string;
-  eventStart: string; // ISO date, YYYY-MM-DD
+  eventStart: string; // ISO date or datetime
   eventLocation: string;
   userGoal: string;
   additionalContext: string;

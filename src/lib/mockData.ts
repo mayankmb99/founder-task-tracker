@@ -310,3 +310,36 @@ export const initialEvents: EventRecord[] = [
     ],
   },
 ];
+
+// Opt-in form fixture only. It is intentionally excluded from initialEvents so
+// bootstrap never inserts it into Supabase without an explicit user save.
+export const salesMeetingDemo: EventRecord = {
+  id: "demo-sales-meeting",
+  eventType: "sales_meeting",
+  eventName: "Product discovery call with GrowthStack",
+  eventDescription:
+    "A product discovery conversation with GrowthStack's Head of Growth.",
+  eventStart: `${dateOffset(2)}T11:00`,
+  eventLocation: "Video call",
+  userGoal: "Secure agreement for a product demo with the wider growth team.",
+  additionalContext: "Use only the supplied other-party context and existing company facts.",
+  audienceSegmentId: null,
+  targets: [
+    {
+      id: "demo-sales-target",
+      personName: "Riya Mehta",
+      role: "Head of Growth",
+      companyName: "GrowthStack",
+      companyDescription: "B2B SaaS company.",
+      knownNeeds: [
+        "better meeting preparation",
+        "more consistent sales follow-up",
+        "less context lost across email and calendar",
+      ],
+      relevanceReason:
+        "Riya leads growth and can validate whether the preparation and follow-up workflow fits the wider team.",
+      priority: "high",
+      status: "not_contacted",
+    },
+  ],
+};

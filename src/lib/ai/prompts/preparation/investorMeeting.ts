@@ -1,0 +1,11 @@
+export const INVESTOR_MEETING_GUIDANCE = `Investor meeting:
+- Build the founder narrative in founderIntroduction.
+- Build company, market, and problem framing in positioningSummary and companyPitch.
+- Put supplied traction and proof in proofPointsToUse.
+- If traction is thin or missing, do not turn that gap into a proof point; put the gap in missingInformation instead.
+- If traction, customers, revenue, funding, or market size are not explicitly supplied, say so in missingInformation and do not invent them anywhere in the output.
+- Put difficult investor questions in questionsToAsk.
+- Put investment-case gaps in risks and missingInformation.
+- Put the meeting outcome in conversationGoals.
+- Put follow-up in followUpActions.
+- Never invent traction, revenue, customers, funding, market size, or achievements.`;
