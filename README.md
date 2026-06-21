@@ -1,6 +1,6 @@
 # Founder Task Tracker
 
-Founder Task Tracker is a Next.js app with two AI workflows:
+Task Bar is a Next.js app with two AI workflows:
 
 1. task extraction from manual text/messages
 2. preparation strategy generation for founder meetings and events
@@ -13,7 +13,7 @@ It uses OpenAI’s Responses API with strict Structured Outputs and Supabase Pos
 - lets you add, edit, or dismiss task suggestions
 - stores accepted tasks in Supabase and keeps them in Today / Upcoming
 - generates a grounded preparation strategy for sales, investor, partnership, vendor, customer-call, startup-event, conference, and other interaction types
-- persists preparation strategies and strategy-derived tasks
+- persists preparation strategies and strategy-derived tasks like a chief of staff
 - supports optional document retrieval through OpenAI File Search when configured
 
 ## AI workflows
